@@ -15,4 +15,4 @@ def health():
 
 @app.get("/")
 def root():
-    return {"app": "app-teste", "versao": VERSION, "cor": COLOR}
+    return {"app": "app-teste-v2 teste", "versao": VERSION, "cor": COLOR}
