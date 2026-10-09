@@ -1,0 +1,56 @@
+#cloud-config
+# Roda uma vez, no primeiro boot de cada VM. Prepara: swap, Docker, Nginx, usuario "deploy".
+# Acompanhar na VM:  cloud-init status --wait   |   sudo tail -f /var/log/cloud-init-output.log
+
+package_update: true
+packages:
+  - docker.io
+  - nginx
+  - git
+  - curl
+  - jq
+
+users:
+  - default
+  - name: deploy
+    shell: /bin/bash
+    lock_passwd: true
+
+write_files:
+  # "deploy" so pode testar e recarregar o Nginx como root - nada alem disso
+  - path: /etc/sudoers.d/deploy
+    permissions: "0440"
+    defer: true
+    content: |
+      deploy ALL=(root) NOPASSWD: /usr/sbin/nginx -t, /usr/sbin/nginx -s reload
+
+  # Nginx escuta na 80 e repassa para a cor ativa (o deploy.sh reescreve o .upstream)
+  - path: /etc/nginx/sites-available/app-teste
+    defer: true
+    content: |
+      upstream app_teste {
+          include /etc/nginx/lux/app-teste.upstream;
+      }
+      server {
+          listen 80 default_server;
+          location / {
+              proxy_pass http://app_teste;
+              proxy_set_header Host $host;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+          }
+      }
+
+runcmd:
+  # Swap de 2 GB - as VMs gratuitas tem ~1 GB de RAM e o blue-green roda 2 containers por alguns segundos
+  - fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  - usermod -aG docker deploy
+  - mkdir -p /etc/nginx/lux /opt/lux/app-teste
+  - echo 'server 127.0.0.1:18001;' > /etc/nginx/lux/app-teste.upstream
+  - touch /opt/lux/app-teste/.env
+  - chown -R deploy:deploy /etc/nginx/lux /opt/lux
+  - rm -f /etc/nginx/sites-enabled/default
+  - ln -sf /etc/nginx/sites-available/app-teste /etc/nginx/sites-enabled/app-teste
+  - systemctl enable --now docker
+  - nginx -t && systemctl reload nginx
