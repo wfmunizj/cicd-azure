@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 VERSION = os.getenv("APP_VERSION", "local")
 COLOR = os.getenv("APP_COLOR", "local")
+NOVA_VARIAVEL = os.environ["NOVA_VARIAVEL"]
 
 app = FastAPI(title="app-teste", version=VERSION)
 
